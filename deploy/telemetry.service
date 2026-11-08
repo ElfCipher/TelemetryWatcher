@@ -1,0 +1,32 @@
+[Unit]
+Description=Telemetry - lightweight system metrics server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/telemetry
+Environment="TELEMETRY_HOST=0.0.0.0"
+Environment="TELEMETRY_PORT=8000"
+Environment="TELEMETRY_INTERVAL=2"
+Environment="TELEMETRY_BUFFER_SIZE=3600"
+# Persist history between restarts (optional):
+# Environment="TELEMETRY_SQLITE_PATH=/var/lib/telemetry/metrics.db"
+# Require a bearer token for /api/* and /ws/metrics (optional):
+# Environment="TELEMETRY_TOKEN=change-me"
+ExecStart=/opt/telemetry/.venv/bin/telemetry
+Restart=always
+RestartSec=3
+
+# Hardening; adjust paths for your installation.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+StateDirectory=telemetry
+ReadWritePaths=/var/lib/telemetry
+
+[Install]
+WantedBy=multi-user.target

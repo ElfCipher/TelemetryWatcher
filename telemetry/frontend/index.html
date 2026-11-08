@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Телеметрия</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◈</span>
+      <div>
+        <h1>Телеметрия</h1>
+        <p id="host-label">системный монитор</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <label class="interval-control" for="interval-select">
+        <span>Интервал</span>
+        <select id="interval-select">
+          <option value="0.5">0.5 с</option>
+          <option value="1">1 с</option>
+          <option value="2" selected>2 с</option>
+          <option value="5">5 с</option>
+          <option value="10">10 с</option>
+          <option value="30">30 с</option>
+        </select>
+      </label>
+      <span id="connection" class="badge badge-offline" role="status" aria-live="polite">
+        <span class="dot"></span>
+        <span id="connection-text">нет связи</span>
+      </span>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards" aria-label="Текущие метрики">
+      <article class="card">
+        <span class="card-label">CPU</span>
+        <strong id="cpu-value" class="card-value">—</strong>
+        <span id="cpu-sub" class="card-sub">—</span>
+      </article>
+      <article class="card">
+        <span class="card-label">Температура</span>
+        <strong id="temp-value" class="card-value">—</strong>
+        <span id="temp-sub" class="card-sub">SoC</span>
+      </article>
+      <article class="card">
+        <span class="card-label">Память</span>
+        <strong id="mem-value" class="card-value">—</strong>
+        <span id="mem-sub" class="card-sub">—</span>
+      </article>
+      <article class="card">
+        <span class="card-label">Диск</span>
+        <strong id="disk-value" class="card-value">—</strong>
+        <span id="disk-sub" class="card-sub">—</span>
+      </article>
+      <article class="card">
+        <span class="card-label">Приём</span>
+        <strong id="rx-value" class="card-value">—</strong>
+        <span id="rx-sub" class="card-sub">—</span>
+      </article>
+      <article class="card">
+        <span class="card-label">Отдача</span>
+        <strong id="tx-value" class="card-value">—</strong>
+        <span id="tx-sub" class="card-sub">—</span>
+      </article>
+    </section>
+
+    <section class="grid-charts" aria-label="Графики">
+      <article class="panel chart-panel">
+        <div class="panel-head">
+          <h2>Нагрузка</h2>
+          <span class="legend"><i class="swatch swatch-cpu"></i>CPU <i class="swatch swatch-mem"></i>RAM <i class="swatch swatch-temp"></i>Темп.</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="load-chart"></canvas>
+        </div>
+      </article>
+      <article class="panel chart-panel">
+        <div class="panel-head">
+          <h2>Сеть</h2>
+          <span class="legend">КБ/с</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="net-chart"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid-bottom">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Топ процессов</h2>
+          <span id="processes-updated" class="muted"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Процесс</th>
+                <th class="num">PID</th>
+                <th class="num">CPU</th>
+                <th class="num">RAM</th>
+              </tr>
+            </thead>
+            <tbody id="processes-body">
+              <tr><td colspan="4" class="empty">Нет данных</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Экспорт истории</h2>
+        </div>
+        <div class="export-form">
+          <label>С
+            <input type="datetime-local" id="export-start">
+          </label>
+          <label>По
+            <input type="datetime-local" id="export-end">
+          </label>
+          <div class="buttons">
+            <button type="button" id="export-csv" class="button primary">Скачать CSV</button>
+            <button type="button" id="export-json" class="button">JSON</button>
+          </div>
+          <p class="muted">Данные берутся из кольцевого буфера сервера. По умолчанию — последний час.</p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <span>Telemetry</span>
+    <span><span id="footer-meta"></span> · <span id="footer-updated"></span></span>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
