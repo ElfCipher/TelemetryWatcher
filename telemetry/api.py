@@ -184,7 +184,7 @@ def create_app(
             await active_storage.close()
 
     app = FastAPI(
-        title="Pi Telemetry",
+        title="Telemetry",
         version=__version__,
         description="Lightweight system telemetry for Linux",
         lifespan=lifespan,

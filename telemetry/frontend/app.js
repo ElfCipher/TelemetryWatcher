@@ -273,9 +273,14 @@
     const load = Array.isArray(cpu.load_avg)
       ? cpu.load_avg.map((value) => num(value, 2)).join(" · ")
       : "—";
-    $("cpu-sub").textContent = cores
-      ? `${cores} ядер · LA ${load}`
-      : `LA ${load}`;
+    $("cpu-sub").textContent = cores ? `${cores} ядер · LA ${load}` : `LA ${load}`;
+    $("cpu-more").replaceChildren();
+    for (const core of cpu.per_cpu) {
+      const li = document.createElement('li');
+      console.log(core);
+      li.textContent = `${num(core)}`; 
+      $("cpu-more").appendChild(li);
+    }
 
     const temperature = point.temperature_c;
     $("temp-value").textContent =
