@@ -5,11 +5,11 @@
 
 ## 1. Что это
 
-Лёгкий сервис телеметрии для Linux по требованиям из `README.md`:
+Лёгкий сервис телеметрии для Linux по требованиям из `TASK.md`:
 один процесс FastAPI + Uvicorn, сбор метрик через `psutil`, кольцевой буфер в
 памяти, опциональный SQLite, REST + WebSocket, статический SPA-фронтенд.
 
-`README.md` — исходное ТЗ, не переписывался. `DEPLOY.md` — инструкция по
+`TASK.md` — исходное ТЗ, не переписывался. `README.md` — инструкция по
 развёртыванию.
 
 ## 2. Текущее состояние
@@ -26,8 +26,8 @@
 
 ```text
 /home/stas/Telemetry/
-├── README.md                  # исходное ТЗ
-├── DEPLOY.md                  # запуск, env, systemd, примеры API
+├── TASK.md                    # исходное ТЗ
+├── README.md                  # запуск, env, systemd, примеры API
 ├── LICENSE                    # MIT
 ├── Makefile                   # install / test / lint / run / build / clean
 ├── pyproject.toml             # пакет, зависимости, pytest, ruff
@@ -244,7 +244,7 @@ cd /home/stas/Telemetry
   --token change-me
 ```
 
-`DEPLOY.md` содержит установку, systemd и примеры `curl`.
+`README.md` содержит установку, systemd и примеры `curl`.
 
 ## 8. Проведённые пробные запуски
 
@@ -272,7 +272,7 @@ cd /home/stas/Telemetry
 - В точке хранится только `top_processes` (5 по умолчанию), поэтому
   `/processes?limit>5` вернёт максимум 5.
 - Auth защищает только `/api/*`; `/health` и статика открыты.
-- В `README.md` осталась исходная спецификация; не путать с документацией
+- В `TASK.md` осталась исходная спецификация; не путать с документацией
   реализации.
 - Фронтенд лежит в `telemetry/frontend`, а не в корне `frontend/`, чтобы
   попадать в wheel.

@@ -5,8 +5,6 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
 WorkingDirectory=/opt/telemetry
 Environment="TELEMETRY_HOST=0.0.0.0"
 Environment="TELEMETRY_PORT=8000"

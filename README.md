@@ -1,165 +1,67 @@
-Ниже — архитектура и протокол лёгкого сервиса телеметрии, оптимизированного для Raspberry Pi 4, но переносимого на любой Linux. В основе — Python-бэкенд на FastAPI (асинхронный, с низким потреблением памяти) и статический фронтенд, отдаваемый тем же процессом. Для сбора метрик используется кроссплатформенная библиотека `psutil`, для графиков — Chart.js.
+# Развёртывание
 
----
+## Быстрый запуск
 
-## Архитектура сервиса
-
-Сервис состоит из четырёх логических слоёв, работающих в одном процессе (это критично для экономии RAM на Pi):
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Telemetry Process                        │
-│                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
-│  │  Collector   │───▶│   Storage    │───▶│  API Server  │   │
-│  │  (psutil +   │    │ (ring buffer │    │  (FastAPI)   │   │
-│  │   sysfs)     │    │  + optional  │    │              │   │
-│  └──────────────┘    │   SQLite)    │    └──────┬───────┘   │
-│         ▲            └──────────────┘           │           │
-│         │                                       │           │
-│         │ asyncio task / thread                │ HTTP / WS │
-│         │                                       ▼           │
-│  ┌──────────────┐                        ┌──────────────┐   │
-│  │  Scheduler   │                        │   Frontend   │   │
-│  │ (interval)   │                        │ (HTML/CSS/JS)│   │
-│  └──────────────┘                        └──────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+```bash
+cd /home/stas/Telemetry
+sudo apt install -y python3-venv   # Debian/Ubuntu, if venv is unavailable
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m telemetry --host 0.0.0.0 --port 8000
 ```
 
-### Сборщик метрик (Collector)
+Откройте `http://<host>:8000/`. REST-документация — `http://<host>:8000/api/docs`.
 
-- Использует `psutil` для CPU, памяти, дисков, сети и списка процессов.
-- Температура читается из `/sys/class/thermal/thermal_zone0/temp` (или через `psutil.sensors_temperatures()`, если доступно).
-- Топ-5 процессов собираются через `psutil.process_iter()` с сортировкой по `cpu_percent()` или `memory_percent()`.
-- Сбор запускается фоновой асинхронной задачей (`asyncio.create_task`) с настраиваемым интервалом (по умолчанию 2–5 секунд). Это позволяет не блокировать event loop FastAPI.
+## Параметры
 
-### Хранилище (Storage)
+Все настройки читаются из переменных окружения `TELEMETRY_*` и могут быть
+переопределены аргументами командной строки.
 
-- **Основное:** кольцевой буфер в памяти (`collections.deque` с `maxlen`) на N последних точек (например, 3600 точек = 1 час при интервале 1 с). Это даёт нулевой дисковый I/O и минимальное потребление RAM.
-- **Опционально:** периодический сброс в SQLite (лёгкий, встроенный) для сохранения истории между перезапусками. Включать только по требованию.
-- Буфер защищён `asyncio.Lock` для безопасного чтения из API и записи из коллектора.
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `TELEMETRY_HOST` | `0.0.0.0` | Адрес прослушивания |
+| `TELEMETRY_PORT` | `8000` | Порт |
+| `TELEMETRY_INTERVAL` | `2` | Интервал сбора, секунды |
+| `TELEMETRY_BUFFER_SIZE` | `3600` | Размер кольцевого буфера, точек |
+| `TELEMETRY_TOP_PROCESSES` | `5` | Сколько процессов хранить в точке |
+| `TELEMETRY_SQLITE_PATH` | — | Включить SQLite-персистентность |
+| `TELEMETRY_SQLITE_FLUSH` | `30` | Период сброса в SQLite, секунды |
+| `TELEMETRY_TOKEN` | — | Bearer-токен для `/api/*` и `/ws/metrics` |
+| `TELEMETRY_START_COLLECTOR` | `true` | Запускать фоновый сборщик |
+| `TELEMETRY_LOG_LEVEL` | `info` | Уровень логирования |
 
-### API-сервер (FastAPI + Uvicorn)
+Аргументы CLI: `--host`, `--port`, `--interval`, `--buffer-size`, `--sqlite`,
+`--token`, `--log-level`.
 
-- Отдаёт REST-эндпоинты для получения текущих и исторических данных, а также WebSocket для real-time обновлений.
-- Раздаёт статические файлы фронтенда (`StaticFiles`) — отдельный веб-сервер (Nginx) не требуется.
-- Uvicorn работает в одном воркере.
+## systemd
 
-### Фронтенд (SPA на чистом JS)
-
-- Один `index.html`, `style.css`, `app.js`. Графики — Chart.js (лёгкая, ~60 КБ).
-- Подключается к WebSocket для получения потока метрик; при необходимости запрашивает историю через REST.
-- Позволяет менять интервал опроса (отправляет команду на сервер через WebSocket или REST).
-- Кнопка «Экспорт» формирует запрос к `/api/v1/export` с выбранными `start`/`end` и скачивает CSV-файл.
-
----
-
-## Протокол
-
-### REST API (префикс `/api/v1`)
-
-Все ответы — JSON (кроме экспорта), кодировка UTF-8.
-
-#### 1. Текущие метрики
-
-`GET /api/v1/metrics`
-
-Возвращает последнюю точку из буфера.
-
-**Пример ответа:**
-```json
-{
-  "timestamp": 1730000000.0,
-  "cpu": {
-    "percent": 12.5,
-    "per_cpu": [10.0, 15.0, 12.0, 13.0],
-    "load_avg": [0.5, 0.4, 0.3]
-  },
-  "temperature_c": 48.2,
-  "memory": {
-    "total": 3936,
-    "available": 2100,
-    "percent": 46.7
-  },
-  "disk": {
-    "total": 29600,
-    "used": 12000,
-    "percent": 40.5,
-    "read_bytes": 123456,
-    "write_bytes": 654321
-  },
-  "network": {
-    "bytes_sent": 987654,
-    "bytes_recv": 1234567,
-    "packets_sent": 1000,
-    "packets_recv": 1500
-  },
-  "top_processes": [
-    {"pid": 1234, "name": "python3", "cpu_percent": 25.0, "memory_percent": 5.2},
-    {"pid": 5678, "name": "node", "cpu_percent": 10.0, "memory_percent": 8.1}
-  ]
-}
+```bash
+sudo useradd --system --home /opt/telemetry --shell /usr/sbin/nologin pi
+sudo mkdir -p /opt/telemetry
+sudo rsync -a --exclude .venv ./ /opt/telemetry/
+sudo -u pi python3 -m venv /opt/telemetry/.venv
+sudo -u pi /opt/telemetry/.venv/bin/pip install /opt/telemetry
+sudo cp deploy/telemetry.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now telemetry
 ```
-*(единицы памяти — МБ, диска — МБ, сети — байты)*
 
-#### 2. История метрик
+Проверка:
 
-`GET /api/v1/metrics/history?start=<unix>&end=<unix>&step=<sec>`
+```bash
+systemctl status telemetry
+curl http://127.0.0.1:8000/health
+```
 
-- `start`, `end` — временные метки (обязательны).
-- `step` — прореживание (опционально, по умолчанию 1 — все точки).
-- Возвращает массив объектов той же структуры, что и текущая метрика.
+## Проверка API
 
-#### 3. Топ-процессы (отдельно)
+```bash
+curl http://127.0.0.1:8000/api/v1/metrics
+curl 'http://127.0.0.1:8000/api/v1/metrics/history?start=0&end=9999999999&step=5'
+curl -X POST http://127.0.0.1:8000/api/v1/config \
+     -H 'Content-Type: application/json' -d '{"interval_sec": 2}'
+curl -OJ 'http://127.0.0.1:8000/api/v1/export?start=0&end=9999999999&format=csv'
+```
 
-`GET /api/v1/processes?limit=5&sort=cpu`
-
-- `sort`: `cpu` или `memory`.
-- Возвращает массив процессов.
-
-#### 4. Экспорт данных
-
-`GET /api/v1/export?start=<unix>&end=<unix>&format=csv`
-
-- `format`: `csv` (по умолчанию) или `json`.
-- Возвращает файл с заголовком `Content-Disposition: attachment; filename=telemetry_<start>_<end>.csv`.
-- CSV-столбцы: `timestamp,cpu_percent,mem_percent,temp_c,disk_percent,net_sent,net_recv,...`.
-
-#### 5. Управление интервалом сбора
-
-`POST /api/v1/config`
-
-**Тело:** `{"interval_sec": 2}`  
-Меняет интервал работы коллектора. Возвращает `{"status": "ok", "interval_sec": 2}`.
-
-### WebSocket (real-time)
-
-`ws://<host>:<port>/ws/metrics`
-
-- После установки соединения сервер начинает отправлять сообщения с той же структурой, что и `GET /metrics`, с частотой, равной интервалу сбора.
-- Клиент может отправить текстовое сообщение `"set_interval:5"` — сервер изменит интервал (аналогично REST).
-- При переподключении клиент может запросить «догон» истории через REST.
-
-### Формат точек и единицы
-
-| Поле | Единица |
-|---|---|
-| `timestamp` | Unix-время (float, секунды) |
-| `cpu.percent` | % (0–100) |
-| `temperature_c` | °C |
-| `memory.*` | МБ |
-| `disk.*` | МБ |
-| `network.*` | байты (накопительно) |
-| `top_processes[].cpu_percent` | % (относительно одного ядра) |
-
----
-
-## Рекомендации по реализации
-
-- **Стек:** Python 3.9+, FastAPI, Uvicorn, `psutil`, `aiofiles` (для экспорта). Фронтенд — Chart.js (CDN или локальная копия).
-- **Лёгкость:** один процесс, без внешних БД и брокеров.
-- **Портируемость:** `psutil` работает на Linux, macOS, Windows; температура и топ-процессы имеют graceful fallback (если датчик недоступен, поле `temperature_c` = `null`).
-- **Развёртывание:** `systemd`-юнит с `Restart=always`, запуск от пользователя с правами чтения `psutil` (обычно достаточно).
-- **Безопасность:** для локальной сети достаточно; при необходимости — простой токен в заголовке `Authorization` (проверяется middleware).
-
-Такая архитектура даёт минимальный оверхед, полный набор запрошенных метрик и удобный браузерный интерфейс без развёртывания дополнительных сервисов.
+Если задан `TELEMETRY_TOKEN`, добавьте заголовок
+`Authorization: Bearer <token>` (для WebSocket допускается `?token=<token>`).
